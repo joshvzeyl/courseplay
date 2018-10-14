@@ -73,7 +73,7 @@ end
 --- Find the best angle to use for the tracks in a polygon.
 --  The best angle results in the minimum number of tracks
 --  (and thus, turns) needed to cover the polygon.
-function findBestTrackAngle( polygon, islands, width, distanceFromBoundary, centerSettings )
+function findBestTrackAngle( polygon, islands, width, distanceFromBoundaryBottom, distanceFromBoundaryTop, centerSettings )
 	local bestAngleStats = {}
 	local bestAngleIndex
 	local score
@@ -102,7 +102,7 @@ function findBestTrackAngle( polygon, islands, width, distanceFromBoundary, cent
 
 		local rotatedIslands = Island.rotateAll( islands, math.rad( angle ))
 
-		local tracks = generateParallelTracks( rotated, rotatedIslands, width, distanceFromBoundary )
+		local tracks = generateParallelTracks( rotated, rotatedIslands, width, distanceFromBoundaryBottom, distanceFromBoundaryTop )
 		local blocks = splitCenterIntoBlocks( tracks, width )
 		local smallBlockScore = countSmallBlockScore( blocks )
 		-- instead of just the number of tracks, consider some other factors. We prefer just one block (that is,
@@ -145,14 +145,18 @@ end
 --- Generate up/down tracks covering a polygon at the optimum angle
 -- 
 function generateTracks( polygon, islands, width, extendTracks, nHeadlandPasses, centerSettings )
-	local distanceFromBoundary
+	local distanceFromBoundaryTop, distanceFromBoundaryBottom
 	if nHeadlandPasses == 0 then
 		-- ugly hack: if there are no headlands, our tracks go right up to the field boundary. So extend tracks
 		-- exactly width / 2
 		extendTracks = extendTracks + width / 2
-		distanceFromBoundary = width / 2
+		-- always leave half implementwidth to field boundary
+		distanceFromBoundaryBottom = width / 2
+		distanceFromBoundaryTop = width / 2
 	else
-		distanceFromBoundary = width
+		distanceFromBoundaryBottom = width
+		-- if there's a headland, let the up/down rows overlap with it (instead of each other)
+		distanceFromBoundaryTop = 0
 	end
 
 	-- translate polygon so we can rotate it around its center. This way all points
@@ -165,7 +169,8 @@ function generateTracks( polygon, islands, width, extendTracks, nHeadlandPasses,
 
 	local bestAngle, nTracks, nBlocks, resultIsOk
 	-- Now, determine the angle where the number of tracks is the minimum
-	bestAngle, nTracks, nBlocks, resultIsOk = findBestTrackAngle( boundary, translatedIslands, width, distanceFromBoundary, centerSettings )
+	bestAngle, nTracks, nBlocks, resultIsOk = findBestTrackAngle( boundary, translatedIslands, width,
+		distanceFromBoundaryBottom, distanceFromBoundaryTop, centerSettings )
 	if nBlocks < 1 then
 		courseGenerator.debug( "No room for up/down rows." )
 		return nil, 0, 0, nil, true
@@ -180,7 +185,7 @@ function generateTracks( polygon, islands, width, extendTracks, nHeadlandPasses,
 	boundary:rotate(math.rad(bestAngle))
 	local rotatedIslands = Island.rotateAll( translatedIslands, math.rad( bestAngle ))
 
-	local parallelTracks = generateParallelTracks( boundary, rotatedIslands, width, distanceFromBoundary )
+	local parallelTracks = generateParallelTracks( boundary, rotatedIslands, width, distanceFromBoundaryBottom, distanceFromBoundaryTop)
 
 	local blocks = splitCenterIntoBlocks( parallelTracks, width )
 
@@ -192,7 +197,7 @@ function generateTracks( polygon, islands, width, extendTracks, nHeadlandPasses,
 		block.covered = false
 	end
 
-	if #blocks > 10 or ( #blocks > 1 and ( nTotalTracks / #blocks ) < 2 ) then
+	if #blocks > 20 or ( #blocks > 1 and ( nTotalTracks / #blocks ) < 2 ) then
 		-- don't waste time on unrealistic problems
 		courseGenerator.debug( 'Implausible number of blocks/tracks (%d/%d), not generating up/down rows', #blocks, nTotalTracks )
 		return nil, 0, 0, nil, false
@@ -271,7 +276,7 @@ end
 --- Generate a list of parallel tracks within the field's boundary
 -- At this point, tracks are defined only by they endpoints and 
 -- are not connected
-function generateParallelTracks( polygon, islands, width, distanceFromBoundary )
+function generateParallelTracks(polygon, islands, width, distanceFromBoundaryBottom, distanceFromBoundaryTop)
 	local tracks = {}
 	local function addTrack( fromX, toX, y, ix )
 		local from = { x = fromX, y = y, track=ix }
@@ -280,14 +285,17 @@ function generateParallelTracks( polygon, islands, width, distanceFromBoundary )
 		-- alternating directions later.
 		table.insert( tracks, { from=from, to=to, intersections={}, originalTrackNumber = ix } )
 	end
-	local trackIndex = 1
+	-- adjust width so tracks cover the entire area and the overlap between them is the same everywhere
+	-- instead of just overlapping the last one with the previous
+	local totalWidth = polygon.boundingBox.maxY - polygon.boundingBox.minY
+	local nTracks = math.ceil(totalWidth / width)
 	-- use just a little bit of overlap to make sure not missing fruit
-	for y = polygon.boundingBox.minY + distanceFromBoundary - 0.2, polygon.boundingBox.maxY - distanceFromBoundary + 0.2, width do
-		addTrack( polygon.boundingBox.minX, polygon.boundingBox.maxX, y, trackIndex )
-		trackIndex = trackIndex + 1
+	local y = polygon.boundingBox.minY + distanceFromBoundaryBottom
+	for trackIndex = 1, nTracks do
+		addTrack( polygon.boundingBox.minX, polygon.boundingBox.maxX,
+			math.min(y, polygon.boundingBox.maxY - distanceFromBoundaryTop), trackIndex )
+		y = y + width
 	end
-	-- add the last track
-	addTrack( polygon.boundingBox.minX, polygon.boundingBox.maxX, polygon.boundingBox.maxY - distanceFromBoundary, trackIndex )
 	-- tracks has now a list of segments covering the bounding box of the
 	-- field.
 	findIntersections( polygon, tracks )
@@ -589,7 +597,7 @@ function splitCenterIntoBlocks( tracks, width )
 		local splitTracks = {}
 		cleanupIntersections( t.intersections )
 		if #t.intersections % 2 ~= 0 or #t.intersections < 2 then
-			courseGenerator.debug( 'Found track with odd number (%d) of intersections', #t.intersections )
+			--courseGenerator.debug( 'Found track with odd number (%d) of intersections', #t.intersections )
 			table.remove( t.intersections, #t.intersections )
 		end
 		if t.to.x - t.from.x < 15 then

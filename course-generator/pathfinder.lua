@@ -29,7 +29,7 @@ local hasFruit
 --
 --- add some area with fruit for tests
 function pathFinder.addFruitDistanceFromBoundary( grid, polygon )
-	local distance = 10
+	local distance = 20
 	for y, row in ipairs( grid.map ) do
 		for x, index in pairs( row ) do
 			local _, minDistanceToFieldBoundary = polygon:getClosestPointIndex({ x = grid[ index ].x, y = grid[ index ].y })
@@ -72,6 +72,8 @@ local function isOnField( node )
 			local densityBits = getDensityAtWorldPos( g_currentMission.terrainDetailId, node.x, y, -node.y);
 			node.isOnField = densityBits ~= 0
 		end
+	else
+		node.isOnField = true
 	end
 	return node.isOnField
 end
@@ -102,7 +104,7 @@ local function generateGridForPolygon( polygon, gridSpacingHint )
 	-- for this limit, use a fraction to reduce the chance of ending up right on the field edge (assuming fields
 	-- are drawn using integer sizes) as that may result in a row or two missing in the grid
 	gridSpacing = gridSpacingHint or math.max( 4.071, math.sqrt( polygon.area ) / 64 )
-	local horizontalLines = generateParallelTracks( polygon, {}, gridSpacing, gridSpacing / 2 )
+	local horizontalLines = generateParallelTracks( polygon, {}, gridSpacing, gridSpacing / 2, gridSpacing / 2 )
 	if not horizontalLines then return grid end
 	-- we'll need this when trying to find the array index from the
 	-- grid coordinates. All of these lines are the same length and start

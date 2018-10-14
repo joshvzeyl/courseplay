@@ -386,7 +386,7 @@ function generateTwoSideHeadlands( polygon, islands, implementWidth, extendTrack
 
 	local bestAngle, nTracks, nBlocks, resultIsOk
 	-- Now, determine the angle where the number of tracks is the minimum
-	bestAngle, nTracks, nBlocks, resultIsOk = findBestTrackAngle( boundary, translatedIslands, implementWidth, 0, centerSettings )
+	bestAngle, nTracks, nBlocks, resultIsOk = findBestTrackAngle( boundary, translatedIslands, implementWidth, 0, 0, centerSettings )
 	if nBlocks < 1 then
 		courseGenerator.debug( "No room for up/down rows." )
 		return nil, 0, 0, nil, true
@@ -402,7 +402,7 @@ function generateTwoSideHeadlands( polygon, islands, implementWidth, extendTrack
 	local rotatedIslands = Island.rotateAll( translatedIslands, math.rad( bestAngle ))
 	-- use a distanceFromBoundary > 0 to avoid problems with rectangular fields with not
 	-- perfectly straight sides
-	local parallelTracks = generateParallelTracks( boundary, rotatedIslands, implementWidth, implementWidth / 2 )
+	local parallelTracks = generateParallelTracks(boundary, rotatedIslands, implementWidth, implementWidth / 2, implementWidth / 2)
 
 	local startTrack, endTrack = 1, #parallelTracks
 
